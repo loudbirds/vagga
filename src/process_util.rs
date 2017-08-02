@@ -1,14 +1,14 @@
 use std::env;
 use std::fmt;
 use std::io::{self, Read};
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::os::unix::io::FromRawFd;
 
 use libc::{getuid, kill, c_int, pid_t};
-use libc::{SIGINT, SIGTERM, SIGCHLD, SIGTTIN, SIGTTOU, SIGCONT};
-use libc::{SIGQUIT, SIGTSTP, SIGSTOP};
+use unshare::Signal::{SIGINT, SIGTERM, SIGCHLD, SIGTTIN, SIGTTOU, SIGCONT};
+use unshare::Signal::{self, SIGQUIT, SIGTSTP, SIGSTOP};
 use nix;
-use nix::sys::signal::Signal;
 use nix::unistd::getpid;
 use unshare;
 use unshare::{Command, Stdio, Fd, ExitStatus, UidMap, GidMap, child_events};
@@ -42,7 +42,7 @@ lazy_static! {
 pub fn squash_stdio(cmd: &mut Command) -> Result<(), String> {
     let fd = nix::unistd::dup(2)
         .map_err(|e| format!("Can't duplicate fd 2: {}", e))?;
-    cmd.stdout(unsafe { Stdio::from_raw_fd(fd) });
+    cmd.stdout(Stdio::from_file(File::from_raw_fd(fd)));
     cmd.stdin(Stdio::null());
     Ok(())
 }
@@ -180,8 +180,8 @@ pub fn run_and_wait(cmd: &mut Command)
     unreachable!();
 }
 
-pub fn send_signal(sig: c_int, pid: pid_t, cmd_name: &String) {
-    if unsafe { kill(pid, sig) } < 0 {
+pub fn send_signal(sig: Signal, pid: pid_t, cmd_name: &String) {
+    if unsafe { kill(pid, sig as c_int) } < 0 {
         error!("Error sending {:?} to {:?}: {}",
             get_sig_name(sig), cmd_name, io::Error::last_os_error());
     }
